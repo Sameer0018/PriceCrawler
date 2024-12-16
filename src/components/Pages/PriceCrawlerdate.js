@@ -4,25 +4,29 @@ const PriceCrawlerdate = () => {
   const [esimPlans, setEsimPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("Japan"); // Default to 'usa'
-  const [selectedDate, setSelectedDate] = useState("2024-12-09"); // Default to a specific date
+  const [selectedCountry, setSelectedCountry] = useState("usa");
+  const [selectedDate, setSelectedDate] = useState("2024-12-09");
+  const [noData, setNoData] = useState(false); // State to track if no data is found
 
   const fetchEsimPlans = async (country, date) => {
     setLoading(true);
     setError("");
-    console.log('country, sale',country,date)
+    setNoData(false); // Reset noData state before fetching
     try {
       const response = await fetch(
         `https://crawler.clay.in/api/ScrapPrice/GetScrapPriceBySavedDateAndCountry?savedDate=${date}&country=${country.toLowerCase()}`
       );
-      console.log('Response status:', response.status); // Log the status
       if (!response.ok) {
         throw new Error("Failed to fetch eSIM plans");
       }
       const data = await response.json();
 
       if (data.isSuccess) {
-        setEsimPlans(data.scrapPriceModels); // Directly use the fetched scrapPriceModels
+        if (data.scrapPriceModels.length === 0) {
+          setNoData(true); // Set noData to true if no data is available
+        } else {
+          setEsimPlans(data.scrapPriceModels);
+        }
       } else {
         setError("Failed to retrieve valid data");
       }
@@ -58,7 +62,7 @@ const PriceCrawlerdate = () => {
   }
 
   const groupedData = esimPlans.reduce((acc, item) => {
-    const provider = item.provider; // Group data by provider
+    const provider = item.provider;
     if (!acc[provider]) acc[provider] = [];
     acc[provider].push(item);
     return acc;
@@ -66,7 +70,6 @@ const PriceCrawlerdate = () => {
 
   const dataSizes = [...new Set(esimPlans.map((item) => item.size_Data))]; // Extract unique data sizes
 
-  // Sort sizes in ascending order
   const sizeOrder = (a, b) => {
     const parseSize = (size) => {
       const unitMultiplier = { MB: 1, GB: 1000 };
@@ -78,7 +81,6 @@ const PriceCrawlerdate = () => {
 
   const sortedDataSizes = dataSizes.sort(sizeOrder);
 
-  // Sort providers to ensure "Airhub" appears first
   const providers = Object.keys(groupedData).sort((a, b) =>
     a === "Airhub" ? -1 : b === "Airhub" ? 1 : a.localeCompare(b)
   );
@@ -92,9 +94,10 @@ const PriceCrawlerdate = () => {
 
   return (
     <div className="container mx-auto p-4">
+            <h1 className="text-5xl font-bold text-center">Price Comparison</h1>
+
       {/* Dropdown for country selection */}
       <div className="flex justify-between items-center gap-4 rounded-lg shadow-md">
-        {/* Left section for Country selection */}
         <div className="flex flex-col mb-4 w-1/2">
           <label htmlFor="country" className="text-xl font-semibold mb-2">
             Select Country:
@@ -115,7 +118,6 @@ const PriceCrawlerdate = () => {
           </select>
         </div>
 
-        {/* Right section for Date input */}
         <div className="flex flex-col items-end w-1/2">
           <label htmlFor="date" className="text-xl font-semibold mb-2">
             Select Date:
@@ -130,6 +132,23 @@ const PriceCrawlerdate = () => {
         </div>
       </div>
 
+      {/* Modal for "No data available" message */}
+      {noData && (
+        <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-bold mb-4">No Data Available</h2>
+            <p className="text-xl font-bold">Please select a date after 10<sup>th</sup> December</p>
+            <button
+              onClick={() => setNoData(false)}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
       <table className="min-w-full table-auto border-collapse border border-gray-300 rounded-lg overflow-hidden shadow-lg">
         <thead>
           <tr className="bg-gray-200 text-left">
@@ -143,31 +162,39 @@ const PriceCrawlerdate = () => {
           </tr>
         </thead>
         <tbody>
-          {sortedDataSizes.map((dataSize, index) => (
-            <tr key={index} className="hover:bg-gray-50">
-              <td className="py-3 px-4 border-b text-transform: uppercase font-bold">{selectedCountry}</td>
-              <td className="py-3 px-4 border-b font-bold">{dataSize}</td>
-              {providers.map((provider) => {
-                const providerData = groupedData[provider].find(
-                  (item) => item.size_Data === dataSize
-                );
-                return (
-                  <td key={provider} className="py-3 px-4 border-b">
-                    {providerData ? (
-                      <>
-                        <div>{providerData.validity}</div>
-                        <div className={getPriceStyle(providerData.price)}>
-                          {providerData.price}
-                        </div>
-                      </>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                );
-              })}
+          {noData ? (
+            <tr>
+              <td colSpan={providers.length + 2} className="py-3 px-4 text-center text-red-600">
+                No data available for this date.
+              </td>
             </tr>
-          ))}
+          ) : (
+            sortedDataSizes.map((dataSize, index) => (
+              <tr key={index} className="hover:bg-gray-50">
+                <td className="py-3 px-4 border-b font-bold">{selectedCountry}</td>
+                <td className="py-3 px-4 border-b font-bold">{dataSize}</td>
+                {providers.map((provider) => {
+                  const providerData = groupedData[provider].find(
+                    (item) => item.size_Data === dataSize
+                  );
+                  return (
+                    <td key={provider} className="py-3 px-4 border-b">
+                      {providerData ? (
+                        <>
+                          <div>{providerData.validity}</div>
+                          <div className={getPriceStyle(providerData.price)}>
+                            {providerData.price}
+                          </div>
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
